@@ -14,10 +14,14 @@ homepage = "https://github.com/PistonDevelopers/freetype-sys"
 edition = "2018"
 
 [features]
-bundled = ["libz-sys"]
+default = ["png"]
+bundled = ["libpng-sys?/build"]
+# To avoid breaking changes, we always select the build feature of libpng-sys
+# (at least until the next major API bump)
+png = ["libpng-sys", "libpng-sys/build"]
 
 [dependencies]
-libz-sys = {  version = "1.1.20", optional = true }
+libpng-sys = { version = "1.1.11", optional = true }
 
 [build-dependencies]
 cc = "1"

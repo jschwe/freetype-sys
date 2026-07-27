@@ -1,5 +1,4 @@
 use std::env;
-use std::env::VarError;
 
 fn add_sources(build: &mut cc::Build, root: &str, files: &[&str]) {
     let root = std::path::Path::new(root);
@@ -24,23 +23,21 @@ fn main() {
         return;
     }
 
-    // From libpng/png.h:
-    // "If pnglibconf.h is missing, you can copy scripts/pnglibconf.h.prebuilt to pnglibconf.h"
-    std::fs::copy(
-        "libpng/scripts/pnglibconf.h.prebuilt",
-        "libpng/pnglibconf.h",
-    )
-    .unwrap();
-
     let mut build = cc::Build::new();
 
     build
         .warnings(false)
         .include(".")
         .include("freetype2/include")
-        .include("libpng")
-        .define("FT2_BUILD_LIBRARY", None)
-        .define("FT_CONFIG_OPTION_USE_PNG", None);
+        .define("FT2_BUILD_LIBRARY", None);
+
+    if env::var_os("CARGO_FEATURE_PNG").is_some() {
+        let png_include_dirs = env::var_os("DEP_PNG_INCLUDE").expect("DEP_PNG_INCLUDE not set");
+        build
+            // libpng-sys uses env::join_paths
+            .includes(env::split_paths(&png_include_dirs))
+            .define("FT_CONFIG_OPTION_USE_PNG", None);
+    }
 
     add_sources(
         &mut build,
@@ -92,48 +89,4 @@ fn main() {
     );
 
     build.compile("freetype2");
-
-    // libz-sys comma separates multiple include paths.
-    let zlib_include_paths = match env::var("DEP_Z_INCLUDE") {
-        Ok(include_paths) => include_paths.split(",").map(String::from).collect(),
-        Err(VarError::NotPresent) => {
-            // For some targets (e.g. android and -ohos), libz-sys does not emit the variable,
-            // but we expect the header to be in the sysroot instead so it's fine.
-            vec![]
-        }
-        Err(VarError::NotUnicode(_os_str_paths)) => {
-            println!("cargo:warning:libz-sys header files at non-unicode path. Ignoring");
-            vec![]
-        }
-    };
-
-    let mut build = cc::Build::new();
-    build.include("libpng").includes(zlib_include_paths);
-    build
-        .file("libpng/png.c")
-        .file("libpng/pngerror.c")
-        .file("libpng/pngget.c")
-        .file("libpng/pngmem.c")
-        .file("libpng/pngpread.c")
-        .file("libpng/pngread.c")
-        .file("libpng/pngrio.c")
-        .file("libpng/pngrtran.c")
-        .file("libpng/pngrutil.c")
-        .file("libpng/pngset.c")
-        .file("libpng/pngtrans.c")
-        .file("libpng/pngwio.c")
-        .file("libpng/pngwrite.c")
-        .file("libpng/pngwtran.c")
-        .file("libpng/pngwutil.c");
-
-    let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
-    if arch == "arm" || arch == "aarch64" {
-        build
-            .file("libpng/arm/arm_init.c")
-            .file("libpng/arm/filter_neon_intrinsics.c")
-            .file("libpng/arm/filter_neon.S")
-            .file("libpng/arm/palette_neon_intrinsics.c");
-    }
-
-    build.compile("libpng.a");
 }
